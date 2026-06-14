@@ -50,7 +50,7 @@ The PNG does not contain hidden metadata. The encrypted data is drawn as the 6SE
 
 ## X-readable PNG
 
-v0.3.3 improves **X用PNG保存（読取対応）**.
+v0.3.8 improves **X用PNG保存（読取対応）** and adds **X-safe LOCK export**.
 
 ### What changed
 
@@ -65,7 +65,26 @@ v0.3.3 improves **X用PNG保存（読取対応）**.
 
 The old v0.2.x X export could produce a single very tall image with tiny glyphs. After posting or rescaling, the app could fail to read it back reliably.
 
-v0.3.3 changes the X workflow so the exported PNGs stay readable more easily.
+v0.3.8 changes the X workflow so the exported PNGs stay readable more easily. LOCK mode now has a larger X-safe export with triple-repeated glyph data, because even one damaged bit prevents AES-GCM decryption.
+
+
+### X-safe LOCK export
+
+Encrypted LOCK images are much stricter than normal script images. If Twitter/X resizes or recompresses the image, even a single wrong bit can make AES-GCM reject the whole payload.
+
+v0.3.8 adds **X用LOCK PNG ZIP保存（X再DL対応）**. This mode uses larger glyphs and repeats the encrypted glyph data three times so the reader can recover by majority vote.
+
+For Twitter/X posting, use this mode instead of the normal LOCK PNG export.
+
+
+
+### ZIP import
+
+v0.3.8 restores the multi-page workflow more safely on mobile.
+
+- You can still select multiple PNG files when the device file picker supports it
+- You can also import the generated ZIP file directly
+- This avoids Android / gallery apps that only allow one image at a time
 
 ## Features
 
@@ -76,6 +95,7 @@ v0.3.3 changes the X workflow so the exported PNGs stay readable more easily.
 - LOCK PNG reading and password-based decryption
 - Multi-page X-readable export for SCRIPT MODE
 - Multi-page X-readable export for LOCK MODE
+- X-safe LOCK export with triple-repeated glyph data
 - Multi-file reading for split PNGs
 - 6SEG substitution table
 - Table PNG export
@@ -100,9 +120,16 @@ a way of writing letters, numbers, symbols, and encrypted data with the same six
 
 Both use the same visible six-segment surface.
 
+
+## v0.3.8 note
+
+- SCRIPT PNG reading now forces the exact X-readable grid when the image size matches the generated X pages.
+- A visible version indicator was added to the footer.
+- Service Worker fetch is now network-first to reduce stale-cache problems.
+
 ## Version
 
-v0.3.3
+v0.3.8
 
 ## Author
 

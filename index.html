@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f5f5f0" />
   <title>6SEG SCRIPT</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=0.3.7" />
 </head>
 <body>
   <header class="hero">
@@ -63,18 +63,19 @@
       </div>
 
       <label class="file-box" for="imageFile">
-        <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" multiple />
-        <span>通常PNGを選択して読み込む（複数枚対応）</span>
+        <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*,.zip,application/zip" multiple />
+        <span>PNGまたはZIPを選択して読み込む（複数枚対応）</span>
       </label>
 
       <label for="decodedText">読み取り結果</label>
       <textarea id="decodedText" spellcheck="false" rows="4" readonly></textarea>
+      <p id="readStatus" class="note"></p>
 
       <div class="controls">
         <button id="copyDecodedBtn" class="secondary">読み取り結果をコピー</button>
       </div>
 
-      <p class="note">この読み取りは、このアプリで保存した白黒PNGを想定しています。複数枚のX用PNGもまとめて読み込めます。v0.3.1以降は縮小画像にも前より強くしていますが、色変更や強い圧縮では失敗する場合があります。</p>
+      <p class="note">この読み取りは、このアプリで保存した白黒PNGを想定しています。複数枚のX用PNGも、ZIPのままでも読み込めます。v0.3.8以降はX用PNGの固定グリッドを優先して読みます。縮小画像にも前より強くしていますが、色変更や強い圧縮では失敗する場合があります。</p>
     </section>
 
     <section class="card lock-card">
@@ -94,7 +95,7 @@
       <div class="controls">
         <button id="encryptBtn">暗号化して描画</button>
         <button id="downloadLockBtn" class="secondary">LOCK PNG保存</button>
-        <button id="downloadLockPostBtn" class="secondary">X用LOCK PNG ZIP保存（読取対応）</button>
+        <button id="downloadLockPostBtn" class="secondary">X用LOCK PNG ZIP保存（X再DL対応）</button>
       </div>
 
       <p id="lockStatus" class="note strong-note">AES-GCM 256bit + PBKDF2-SHA-256。PNGには隠しメタデータではなく、暗号データを6SEG文字として描画します。</p>
@@ -111,7 +112,7 @@
       <div class="canvas-wrap">
         <canvas id="lockCanvas" width="800" height="180" aria-label="encrypted 6SEG output preview"></canvas>
       </div>
-      <p class="note">この画像は読もうとしても元文は読めません。復号には同じパスワードが必要です。</p>
+      <p class="note">この画像は読もうとしても元文は読めません。復号には同じパスワードが必要です。Twitter/Xに投稿して再ダウンロードする場合は、通常のLOCK PNGではなく「X用LOCK PNG ZIP保存（X再DL対応）」を使ってください。複数選択しづらいスマホでは、ZIPをそのまま読み込めます。</p>
     </section>
 
     <section class="card">
@@ -123,8 +124,8 @@
       </div>
 
       <label class="file-box" for="lockImageFile">
-        <input id="lockImageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" multiple />
-        <span>LOCK PNGを選択して読み込む（複数枚対応）</span>
+        <input id="lockImageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*,.zip,application/zip" multiple />
+        <span>LOCK PNGまたはZIPを選択して読み込む（複数枚・X再DL対応）</span>
       </label>
 
       <label for="unlockPassword">パスワード</label>
@@ -151,9 +152,9 @@
   </main>
 
   <footer>
-    <p>6SEG SCRIPT / MASATO LAB</p>
+    <p>6SEG SCRIPT / MASATO LAB / <span id="appVersion">v0.3.8</span></p>
   </footer>
 
-  <script src="app.js"></script>
+  <script src="app-v0.3.8.js"></script>
 </body>
 </html>
