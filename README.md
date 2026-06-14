@@ -4,6 +4,21 @@
 
 It started from the 2017 concept **6 SEGMENT LED WATCH** and expands the same six-segment idea from numbers into letters, symbols, readable PNG output, and encrypted PNG output.
 
+## Screenshots
+
+### screenshot1 — SCRIPT MODE / PNG to Text
+
+![screenshot1](docs/screenshot1.png)
+
+### screenshot2 — LOCK MODE / Encrypted Glyph PNG
+
+![screenshot2](docs/screenshot2.png)
+
+### screenshot3 — UNLOCK MODE / TABLE
+
+![screenshot3](docs/screenshot3.png)
+
+
 ## Modes
 
 ### SCRIPT MODE
@@ -35,7 +50,7 @@ The PNG does not contain hidden metadata. The encrypted data is drawn as the 6SE
 
 ## X-readable PNG
 
-v0.3.2 improves **X用PNG保存（読取対応）**.
+v0.3.3 improves **X用PNG保存（読取対応）**.
 
 ### What changed
 
@@ -50,7 +65,7 @@ v0.3.2 improves **X用PNG保存（読取対応）**.
 
 The old v0.2.x X export could produce a single very tall image with tiny glyphs. After posting or rescaling, the app could fail to read it back reliably.
 
-v0.3.2 changes the X workflow so the exported PNGs stay readable more easily.
+v0.3.3 changes the X workflow so the exported PNGs stay readable more easily.
 
 ## Features
 
@@ -87,7 +102,7 @@ Both use the same visible six-segment surface.
 
 ## Version
 
-v0.3.2
+v0.3.3
 
 ## Author
 
