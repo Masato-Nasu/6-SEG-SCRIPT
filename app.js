@@ -1,17 +1,26 @@
 'use strict';
 
-// 6SEG SCRIPT v0.2.0
+// 6SEG SCRIPT v0.2.2
 // SCRIPT MODE: visible glyph system. No hidden metadata is stored in the PNG.
 // LOCK MODE  : AES-GCM encrypted payload is drawn as visible 6SEG glyphs.
 // Segment order: T UL UR LL LR B
 
-const CELL_W = 72;
-const CELL_H = 96;
-const GAP_X = 8;
-const GAP_Y = 18;
-const MARGIN = 24;
-const STROKE = 8;
-const LOCK_WRAP_COLS = 28;
+const PROFILES = {
+  normal: { name: 'normal', cellW: 72, cellH: 96, gapX: 8, gapY: 18, margin: 24, stroke: 8, wrapCols: 28 },
+  post:   { name: 'post',   cellW: 36, cellH: 48, gapX: 4, gapY: 8,  margin: 12, stroke: 4, wrapCols: 40 }
+};
+
+const NORMAL_PROFILE = PROFILES.normal;
+const POST_PROFILE = PROFILES.post;
+
+// Normal profile aliases. Kept for table rendering and compatibility.
+const CELL_W = NORMAL_PROFILE.cellW;
+const CELL_H = NORMAL_PROFILE.cellH;
+const GAP_X = NORMAL_PROFILE.gapX;
+const GAP_Y = NORMAL_PROFILE.gapY;
+const MARGIN = NORMAL_PROFILE.margin;
+const STROKE = NORMAL_PROFILE.stroke;
+const LOCK_WRAP_COLS = NORMAL_PROFILE.wrapCols;
 const PBKDF2_ITERATIONS = 310000;
 
 const SEGMENTS = ['T', 'UL', 'UR', 'LL', 'LR', 'B'];
@@ -61,24 +70,40 @@ function getRows(text) {
   return rows.length ? rows : [''];
 }
 
-function getCanvasSize(rows) {
+function getWrappedRows(text, wrapCols) {
+  const baseRows = getRows(text);
+  if (!wrapCols) return baseRows;
+  const out = [];
+  baseRows.forEach(row => {
+    if (!row.length) {
+      out.push('');
+      return;
+    }
+    for (let i = 0; i < row.length; i += wrapCols) {
+      out.push(row.slice(i, i + wrapCols));
+    }
+  });
+  return out.length ? out : [''];
+}
+
+function getCanvasSize(rows, profile = NORMAL_PROFILE) {
   const cols = Math.max(1, ...rows.map(row => row.length));
-  const width = MARGIN * 2 + cols * CELL_W + Math.max(0, cols - 1) * GAP_X;
-  const height = MARGIN * 2 + rows.length * CELL_H + Math.max(0, rows.length - 1) * GAP_Y;
+  const width = profile.margin * 2 + cols * profile.cellW + Math.max(0, cols - 1) * profile.gapX;
+  const height = profile.margin * 2 + rows.length * profile.cellH + Math.max(0, rows.length - 1) * profile.gapY;
   return { width, height, cols, rowsCount: rows.length };
 }
 
-function getGridSizeForValues(values, wrapCols = LOCK_WRAP_COLS) {
+function getGridSizeForValues(values, wrapCols = LOCK_WRAP_COLS, profile = NORMAL_PROFILE) {
   const cols = Math.max(1, Math.min(wrapCols, Math.max(1, values.length)));
   const rowsCount = Math.max(1, Math.ceil(values.length / cols));
-  const width = MARGIN * 2 + cols * CELL_W + Math.max(0, cols - 1) * GAP_X;
-  const height = MARGIN * 2 + rowsCount * CELL_H + Math.max(0, rowsCount - 1) * GAP_Y;
+  const width = profile.margin * 2 + cols * profile.cellW + Math.max(0, cols - 1) * profile.gapX;
+  const height = profile.margin * 2 + rowsCount * profile.cellH + Math.max(0, rowsCount - 1) * profile.gapY;
   return { width, height, cols, rowsCount };
 }
 
-function segmentLine(x, y, seg) {
-  const w = CELL_W;
-  const h = CELL_H;
+function segmentLine(x, y, seg, profile = NORMAL_PROFILE) {
+  const w = profile.cellW;
+  const h = profile.cellH;
   switch (seg) {
     case 'T':
       return [x + w * 0.30, y + h * 0.15, x + w * 0.70, y + h * 0.15];
@@ -97,17 +122,17 @@ function segmentLine(x, y, seg) {
   }
 }
 
-function drawGlyph(ctx, x, y, pattern, color = '#111') {
+function drawGlyph(ctx, x, y, pattern, color = '#111', profile = NORMAL_PROFILE) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = STROKE;
+  ctx.lineWidth = profile.stroke;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.imageSmoothingEnabled = false;
 
   SEGMENTS.forEach((seg, idx) => {
     if (pattern[idx] !== '1') return;
-    const [x0, y0, x1, y1] = segmentLine(x, y, seg);
+    const [x0, y0, x1, y1] = segmentLine(x, y, seg, profile);
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
@@ -116,9 +141,9 @@ function drawGlyph(ctx, x, y, pattern, color = '#111') {
   ctx.restore();
 }
 
-function renderTextToCanvas(text, canvas) {
-  const rows = getRows(text);
-  const { width, height, cols } = getCanvasSize(rows);
+function renderTextToCanvas(text, canvas, profile = NORMAL_PROFILE, wrapCols = null) {
+  const rows = getWrappedRows(text, wrapCols);
+  const { width, height, cols } = getCanvasSize(rows, profile);
   canvas.width = width;
   canvas.height = height;
 
@@ -131,17 +156,17 @@ function renderTextToCanvas(text, canvas) {
     for (let col = 0; col < cols; col++) {
       const ch = row[col] || ' ';
       const pattern = MAP[ch] || MAP['?'];
-      const x = MARGIN + col * (CELL_W + GAP_X);
-      const y = MARGIN + rowIndex * (CELL_H + GAP_Y);
-      drawGlyph(ctx, x, y, pattern);
+      const x = profile.margin + col * (profile.cellW + profile.gapX);
+      const y = profile.margin + rowIndex * (profile.cellH + profile.gapY);
+      drawGlyph(ctx, x, y, pattern, '#111', profile);
     }
   });
 
-  return { rows, cols, width, height };
+  return { rows, cols, width, height, profile };
 }
 
-function renderValuesToCanvas(values, canvas, wrapCols = LOCK_WRAP_COLS) {
-  const { width, height, cols, rowsCount } = getGridSizeForValues(values, wrapCols);
+function renderValuesToCanvas(values, canvas, wrapCols = LOCK_WRAP_COLS, profile = NORMAL_PROFILE) {
+  const { width, height, cols, rowsCount } = getGridSizeForValues(values, wrapCols, profile);
   canvas.width = width;
   canvas.height = height;
 
@@ -154,21 +179,21 @@ function renderValuesToCanvas(values, canvas, wrapCols = LOCK_WRAP_COLS) {
     for (let col = 0; col < cols; col++) {
       const i = row * cols + col;
       const pattern = values[i] || '000000';
-      const x = MARGIN + col * (CELL_W + GAP_X);
-      const y = MARGIN + row * (CELL_H + GAP_Y);
-      drawGlyph(ctx, x, y, pattern);
+      const x = profile.margin + col * (profile.cellW + profile.gapX);
+      const y = profile.margin + row * (profile.cellH + profile.gapY);
+      drawGlyph(ctx, x, y, pattern, '#111', profile);
     }
   }
 
-  return { cols, rowsCount, width, height };
+  return { cols, rowsCount, width, height, profile };
 }
 
-function sampleSegment(imageData, imgW, x, y, seg) {
-  const [x0, y0, x1, y1] = segmentLine(x, y, seg);
+function sampleSegment(imageData, imgW, x, y, seg, profile = NORMAL_PROFILE) {
+  const [x0, y0, x1, y1] = segmentLine(x, y, seg, profile);
   const steps = 24;
   let dark = 0;
   let total = 0;
-  const radius = 5;
+  const radius = Math.max(2, Math.round(profile.stroke * 0.65));
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -194,25 +219,39 @@ function sampleSegment(imageData, imgW, x, y, seg) {
   return total > 0 && dark / total > 0.18;
 }
 
-function decodeCanvasToBits(canvas) {
+function getGridFit(canvas, profile) {
+  const cols = Math.max(1, Math.round((canvas.width - profile.margin * 2 + profile.gapX) / (profile.cellW + profile.gapX)));
+  const rowsCount = Math.max(1, Math.round((canvas.height - profile.margin * 2 + profile.gapY) / (profile.cellH + profile.gapY)));
+  const expectedW = profile.margin * 2 + cols * profile.cellW + Math.max(0, cols - 1) * profile.gapX;
+  const expectedH = profile.margin * 2 + rowsCount * profile.cellH + Math.max(0, rowsCount - 1) * profile.gapY;
+  const error = Math.abs(canvas.width - expectedW) + Math.abs(canvas.height - expectedH);
+  return { profile, cols, rowsCount, expectedW, expectedH, error };
+}
+
+function chooseDecodeProfile(canvas) {
+  return [NORMAL_PROFILE, POST_PROFILE]
+    .map(profile => getGridFit(canvas, profile))
+    .sort((a, b) => a.error - b.error)[0];
+}
+
+function decodeCanvasToBits(canvas, profile = null) {
+  const fit = profile ? getGridFit(canvas, profile) : chooseDecodeProfile(canvas);
+  const p = fit.profile;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-  const cols = Math.max(1, Math.round((canvas.width - MARGIN * 2 + GAP_X) / (CELL_W + GAP_X)));
-  const rowsCount = Math.max(1, Math.round((canvas.height - MARGIN * 2 + GAP_Y) / (CELL_H + GAP_Y)));
-
   const rows = [];
-  for (let row = 0; row < rowsCount; row++) {
+  for (let row = 0; row < fit.rowsCount; row++) {
     const bitsRow = [];
-    for (let col = 0; col < cols; col++) {
-      const x = MARGIN + col * (CELL_W + GAP_X);
-      const y = MARGIN + row * (CELL_H + GAP_Y);
-      const bits = SEGMENTS.map(seg => sampleSegment(imageData, canvas.width, x, y, seg) ? '1' : '0').join('');
+    for (let col = 0; col < fit.cols; col++) {
+      const x = p.margin + col * (p.cellW + p.gapX);
+      const y = p.margin + row * (p.cellH + p.gapY);
+      const bits = SEGMENTS.map(seg => sampleSegment(imageData, canvas.width, x, y, seg, p) ? '1' : '0').join('');
       bitsRow.push(bits);
     }
     rows.push(bitsRow);
   }
-  return { rows, values: rows.flat(), cols, rowsCount };
+  return { rows, values: rows.flat(), cols: fit.cols, rowsCount: fit.rowsCount, profile: p.name };
 }
 
 function decodeCanvas(canvas) {
@@ -503,6 +542,12 @@ function init() {
     render();
     downloadCanvas(canvas, '6seg-script.png');
   });
+  document.getElementById('downloadPostBtn').addEventListener('click', () => {
+    input.value = normalizeText(input.value);
+    const postCanvas = document.createElement('canvas');
+    renderTextToCanvas(input.value, postCanvas, POST_PROFILE, POST_PROFILE.wrapCols);
+    downloadCanvas(postCanvas, '6seg-script-x-readable.png');
+  });
   document.getElementById('downloadTableBtn').addEventListener('click', () => {
     const tableCanvas = renderLegendCanvas();
     downloadCanvas(tableCanvas, '6seg-script-table.png');
@@ -525,6 +570,14 @@ function init() {
   document.getElementById('downloadLockBtn').addEventListener('click', async () => {
     if (!lastLockCanvasReady) await encryptAndRender();
     if (lastLockCanvasReady) downloadCanvas(document.getElementById('lockCanvas'), '6seg-lock.png');
+  });
+  document.getElementById('downloadLockPostBtn').addEventListener('click', async () => {
+    if (!lastLockCanvasReady) await encryptAndRender();
+    if (lastLockCanvasReady && lastLockValues) {
+      const postCanvas = document.createElement('canvas');
+      renderValuesToCanvas(lastLockValues, postCanvas, POST_PROFILE.wrapCols, POST_PROFILE);
+      downloadCanvas(postCanvas, '6seg-lock-x-readable.png');
+    }
   });
   document.getElementById('lockImageFile').addEventListener('change', ev => {
     const file = ev.target.files && ev.target.files[0];

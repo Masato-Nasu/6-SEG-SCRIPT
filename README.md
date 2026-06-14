@@ -4,20 +4,6 @@
 
 It started from the 2017 concept **6 SEGMENT LED WATCH** and expands the same six-segment idea from numbers into letters, symbols, readable PNG output, and encrypted PNG output.
 
-## Screenshots
-
-### screenshot1 — SCRIPT MODE
-
-![screenshot1](docs/screenshot1.png)
-
-### screenshot2 — LOCK MODE
-
-![screenshot2](docs/screenshot2.png)
-
-### screenshot3 — UNLOCK MODE / TABLE
-
-![screenshot3](docs/screenshot3.png)
-
 ## Modes
 
 ### SCRIPT MODE
@@ -46,6 +32,17 @@ A strong encrypted mode.
 The PNG does not contain hidden metadata. The encrypted data is drawn as the 6SEG glyph sequence itself.
 
 > Security note: the encryption method is strong, but security still depends heavily on the password. Use a long, unique password.
+
+
+## X-readable PNG
+
+v0.2.2 adds **X用PNG保存（読取対応）**.
+
+This is not a resized copy. It is a dedicated smaller 6SEG grid that is still readable by the app.  
+Use this for posting to X instead of resizing the normal PNG manually.
+
+- Normal PNG: larger, easier to view
+- X-readable PNG: smaller, post-friendly, still readable by the app
 
 ## Features
 
@@ -79,7 +76,7 @@ Both use the same visible six-segment surface.
 
 ## Version
 
-v0.2.0
+v0.2.2
 
 ## Author
 
