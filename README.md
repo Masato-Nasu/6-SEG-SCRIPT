@@ -4,6 +4,20 @@
 
 It started from the 2017 concept **6 SEGMENT LED WATCH** and expands the same six-segment idea from numbers into letters, symbols, readable PNG output, and encrypted PNG output.
 
+## Screenshots
+
+### screenshot1 — SCRIPT MODE
+
+![screenshot1](docs/screenshot1.png)
+
+### screenshot2 — LOCK MODE
+
+![screenshot2](docs/screenshot2.png)
+
+### screenshot3 — UNLOCK MODE / TABLE
+
+![screenshot3](docs/screenshot3.png)
+
 ## Modes
 
 ### SCRIPT MODE
