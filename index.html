@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f5f5f0" />
+  <title>6SEG SCRIPT</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">UNUSED DISPLAY STANDARD</p>
+      <h1>6SEG SCRIPT</h1>
+      <p class="lead">6本のセグメントからなる、存在しなかった英数字表示規格。</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="card mode-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SCRIPT MODE</p>
+          <h2>Text to 6SEG</h2>
+        </div>
+        <button id="clearBtn" class="ghost">Clear</button>
+      </div>
+
+      <label for="inputText">変換するテキスト</label>
+      <textarea id="inputText" spellcheck="false" rows="5">ISN'T IT AMAZING?</textarea>
+
+      <div class="controls">
+        <button id="renderBtn">Render</button>
+        <button id="downloadBtn" class="secondary">PNG保存</button>
+        <button id="downloadTableBtn" class="ghost">換字表PNG</button>
+      </div>
+
+      <p class="note">暗号化しない通常モードです。小文字は大文字に変換されます。対応していない文字は <strong>?</strong> に置換されます。</p>
+    </section>
+
+    <section class="card canvas-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">OUTPUT</p>
+          <h2>Visible Glyph PNG</h2>
+        </div>
+        <p id="stat" class="stat"></p>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="previewCanvas" width="800" height="180" aria-label="6SEG output preview"></canvas>
+      </div>
+      <p class="note">PNGの中に隠しデータは入れていません。描かれた6セグ文字そのものを読み取ります。</p>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">READ SCRIPT</p>
+          <h2>PNG to Text</h2>
+        </div>
+      </div>
+
+      <label class="file-box" for="imageFile">
+        <input id="imageFile" type="file" accept="image/png" />
+        <span>通常PNGを選択して読み込む</span>
+      </label>
+
+      <label for="decodedText">読み取り結果</label>
+      <textarea id="decodedText" spellcheck="false" rows="4" readonly></textarea>
+
+      <div class="controls">
+        <button id="copyDecodedBtn" class="secondary">読み取り結果をコピー</button>
+      </div>
+
+      <p class="note">この読み取りは、このアプリで保存した白黒PNGを想定しています。拡大縮小、スクリーンショット、色変更、強い圧縮を行うと読み取りに失敗する場合があります。</p>
+    </section>
+
+    <section class="card lock-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">LOCK MODE</p>
+          <h2>Strong encrypted 6SEG PNG</h2>
+        </div>
+      </div>
+
+      <label for="lockInputText">暗号化するテキスト</label>
+      <textarea id="lockInputText" spellcheck="false" rows="5">THIS IS LOCK MODE.</textarea>
+
+      <label for="lockPassword">パスワード</label>
+      <input id="lockPassword" type="password" autocomplete="new-password" placeholder="strong password" />
+
+      <div class="controls">
+        <button id="encryptBtn">暗号化して描画</button>
+        <button id="downloadLockBtn" class="secondary">LOCK PNG保存</button>
+      </div>
+
+      <p id="lockStatus" class="note strong-note">AES-GCM 256bit + PBKDF2-SHA-256。PNGには隠しメタデータではなく、暗号データを6SEG文字として描画します。</p>
+    </section>
+
+    <section class="card canvas-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">LOCK OUTPUT</p>
+          <h2>Encrypted Glyph PNG</h2>
+        </div>
+        <p id="lockStat" class="stat"></p>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="lockCanvas" width="800" height="180" aria-label="encrypted 6SEG output preview"></canvas>
+      </div>
+      <p class="note">この画像は読もうとしても元文は読めません。復号には同じパスワードが必要です。</p>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">UNLOCK MODE</p>
+          <h2>LOCK PNG to Text</h2>
+        </div>
+      </div>
+
+      <label class="file-box" for="lockImageFile">
+        <input id="lockImageFile" type="file" accept="image/png" />
+        <span>LOCK PNGを選択して読み込む</span>
+      </label>
+
+      <label for="unlockPassword">パスワード</label>
+      <input id="unlockPassword" type="password" autocomplete="current-password" placeholder="password used for lock" />
+
+      <div class="controls">
+        <button id="decryptBtn">復号する</button>
+      </div>
+
+      <label for="unlockedText">復号結果</label>
+      <textarea id="unlockedText" spellcheck="false" rows="4" readonly></textarea>
+      <p id="unlockStatus" class="note"></p>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">TABLE</p>
+          <h2>換字表</h2>
+        </div>
+      </div>
+      <div id="legend" class="legend"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>6SEG SCRIPT / MASATO LAB</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
