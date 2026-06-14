@@ -1,25 +1,54 @@
 'use strict';
 
-// 6SEG SCRIPT v0.2.2
+// 6SEG SCRIPT v0.3.2
 // SCRIPT MODE: visible glyph system. No hidden metadata is stored in the PNG.
 // LOCK MODE  : AES-GCM encrypted payload is drawn as visible 6SEG glyphs.
 // Segment order: T UL UR LL LR B
 
 const PROFILES = {
-  normal: { name: 'normal', cellW: 72, cellH: 96, gapX: 8, gapY: 18, margin: 24, stroke: 8, wrapCols: 28 },
-  post:   { name: 'post',   cellW: 36, cellH: 48, gapX: 4, gapY: 8,  margin: 12, stroke: 4, wrapCols: 40 }
+  normal: {
+    name: 'normal',
+    cellW: 72,
+    cellH: 96,
+    gapX: 8,
+    gapY: 18,
+    margin: 24,
+    stroke: 8,
+    wrapCols: 28
+  },
+  legacyPost: {
+    // v0.2.x single long-image export profile kept for backward-compatible decoding.
+    name: 'legacyPost',
+    cellW: 36,
+    cellH: 48,
+    gapX: 4,
+    gapY: 8,
+    margin: 12,
+    stroke: 4,
+    wrapCols: 40
+  },
+  xpost: {
+    // X-readable export profile: about two pages for long text, without making each page huge.
+    name: 'xpost',
+    cellW: 19,
+    cellH: 28,
+    gapX: 2,
+    gapY: 4,
+    margin: 18,
+    stroke: 4,
+    wrapCols: 44,
+    maxRowsPerPage: 55
+  }
 };
 
 const NORMAL_PROFILE = PROFILES.normal;
-const POST_PROFILE = PROFILES.post;
+const POST_PROFILE = PROFILES.legacyPost;
+const X_PROFILE = PROFILES.xpost;
+const DECODE_PROFILES = [NORMAL_PROFILE, POST_PROFILE, X_PROFILE];
 
 // Normal profile aliases. Kept for table rendering and compatibility.
 const CELL_W = NORMAL_PROFILE.cellW;
 const CELL_H = NORMAL_PROFILE.cellH;
-const GAP_X = NORMAL_PROFILE.gapX;
-const GAP_Y = NORMAL_PROFILE.gapY;
-const MARGIN = NORMAL_PROFILE.margin;
-const STROKE = NORMAL_PROFILE.stroke;
 const LOCK_WRAP_COLS = NORMAL_PROFILE.wrapCols;
 const PBKDF2_ITERATIONS = 310000;
 
@@ -54,7 +83,7 @@ const ORDER = [
 
 let lastLockValues = null;
 let lastLockCanvasReady = false;
-let pendingLockFile = null;
+let pendingLockFiles = [];
 
 function normalizeText(text) {
   return text
@@ -93,12 +122,16 @@ function getCanvasSize(rows, profile = NORMAL_PROFILE) {
   return { width, height, cols, rowsCount: rows.length };
 }
 
-function getGridSizeForValues(values, wrapCols = LOCK_WRAP_COLS, profile = NORMAL_PROFILE) {
-  const cols = Math.max(1, Math.min(wrapCols, Math.max(1, values.length)));
-  const rowsCount = Math.max(1, Math.ceil(values.length / cols));
+function getExpectedGridSize(cols, rowsCount, profile = NORMAL_PROFILE) {
   const width = profile.margin * 2 + cols * profile.cellW + Math.max(0, cols - 1) * profile.gapX;
   const height = profile.margin * 2 + rowsCount * profile.cellH + Math.max(0, rowsCount - 1) * profile.gapY;
   return { width, height, cols, rowsCount };
+}
+
+function getGridSizeForValues(values, wrapCols = LOCK_WRAP_COLS, profile = NORMAL_PROFILE) {
+  const cols = Math.max(1, Math.min(wrapCols, Math.max(1, values.length)));
+  const rowsCount = Math.max(1, Math.ceil(values.length / cols));
+  return getExpectedGridSize(cols, rowsCount, profile);
 }
 
 function segmentLine(x, y, seg, profile = NORMAL_PROFILE) {
@@ -141,8 +174,7 @@ function drawGlyph(ctx, x, y, pattern, color = '#111', profile = NORMAL_PROFILE)
   ctx.restore();
 }
 
-function renderTextToCanvas(text, canvas, profile = NORMAL_PROFILE, wrapCols = null) {
-  const rows = getWrappedRows(text, wrapCols);
+function renderRowsToCanvas(rows, canvas, profile = NORMAL_PROFILE) {
   const { width, height, cols } = getCanvasSize(rows, profile);
   canvas.width = width;
   canvas.height = height;
@@ -163,6 +195,11 @@ function renderTextToCanvas(text, canvas, profile = NORMAL_PROFILE, wrapCols = n
   });
 
   return { rows, cols, width, height, profile };
+}
+
+function renderTextToCanvas(text, canvas, profile = NORMAL_PROFILE, wrapCols = null) {
+  const rows = getWrappedRows(text, wrapCols);
+  return renderRowsToCanvas(rows, canvas, profile);
 }
 
 function renderValuesToCanvas(values, canvas, wrapCols = LOCK_WRAP_COLS, profile = NORMAL_PROFILE) {
@@ -188,20 +225,56 @@ function renderValuesToCanvas(values, canvas, wrapCols = LOCK_WRAP_COLS, profile
   return { cols, rowsCount, width, height, profile };
 }
 
+function paginateRows(rows, maxRowsPerPage) {
+  if (!maxRowsPerPage || maxRowsPerPage < 1) return [rows];
+  const pages = [];
+  for (let i = 0; i < rows.length; i += maxRowsPerPage) {
+    pages.push(rows.slice(i, i + maxRowsPerPage));
+  }
+  return pages.length ? pages : [['']];
+}
+
+function renderTextPagesToCanvases(text, profile = X_PROFILE) {
+  const rows = getWrappedRows(text, profile.wrapCols);
+  const pages = paginateRows(rows, profile.maxRowsPerPage);
+  return pages.map(pageRows => {
+    const canvas = document.createElement('canvas');
+    renderRowsToCanvas(pageRows, canvas, profile);
+    return canvas;
+  });
+}
+
+function renderValuePagesToCanvases(values, profile = X_PROFILE) {
+  const cols = profile.wrapCols || LOCK_WRAP_COLS;
+  const valuesPerPage = cols * (profile.maxRowsPerPage || 18);
+  const pages = [];
+  for (let i = 0; i < values.length; i += valuesPerPage) {
+    const canvas = document.createElement('canvas');
+    renderValuesToCanvas(values.slice(i, i + valuesPerPage), canvas, cols, profile);
+    pages.push(canvas);
+  }
+  if (!pages.length) {
+    const canvas = document.createElement('canvas');
+    renderValuesToCanvas(['000000'], canvas, cols, profile);
+    pages.push(canvas);
+  }
+  return pages;
+}
+
 function sampleSegment(imageData, imgW, x, y, seg, profile = NORMAL_PROFILE) {
   const [x0, y0, x1, y1] = segmentLine(x, y, seg, profile);
-  const steps = 24;
+  const steps = Math.max(10, Math.round(24 * Math.min(1.4, Math.max(0.5, profile.cellW / NORMAL_PROFILE.cellW))));
   let dark = 0;
   let total = 0;
-  const radius = Math.max(2, Math.round(profile.stroke * 0.65));
+  const radius = Math.max(1, Math.round(profile.stroke * 0.6));
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const sx = x0 + (x1 - x0) * t;
     const sy = y0 + (y1 - y0) * t;
 
-    for (let dx = -radius; dx <= radius; dx += 2) {
-      for (let dy = -radius; dy <= radius; dy += 2) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
         const px = Math.round(sx + dx);
         const py = Math.round(sy + dy);
         if (px < 0 || py < 0 || px >= imgW || py >= imageData.height) continue;
@@ -210,53 +283,162 @@ function sampleSegment(imageData, imgW, x, y, seg, profile = NORMAL_PROFILE) {
         const g = imageData.data[off + 1];
         const b = imageData.data[off + 2];
         const brightness = (r + g + b) / 3;
-        if (brightness < 128) dark++;
+        if (brightness < 190) dark++;
         total++;
       }
     }
   }
 
-  return total > 0 && dark / total > 0.18;
+  return total > 0 && dark / total > 0.22;
 }
 
 function getGridFit(canvas, profile) {
   const cols = Math.max(1, Math.round((canvas.width - profile.margin * 2 + profile.gapX) / (profile.cellW + profile.gapX)));
   const rowsCount = Math.max(1, Math.round((canvas.height - profile.margin * 2 + profile.gapY) / (profile.cellH + profile.gapY)));
-  const expectedW = profile.margin * 2 + cols * profile.cellW + Math.max(0, cols - 1) * profile.gapX;
-  const expectedH = profile.margin * 2 + rowsCount * profile.cellH + Math.max(0, rowsCount - 1) * profile.gapY;
-  const error = Math.abs(canvas.width - expectedW) + Math.abs(canvas.height - expectedH);
-  return { profile, cols, rowsCount, expectedW, expectedH, error };
+  const expected = getExpectedGridSize(cols, rowsCount, profile);
+  const error = Math.abs(canvas.width - expected.width) + Math.abs(canvas.height - expected.height);
+  return { profile, cols, rowsCount, expectedW: expected.width, expectedH: expected.height, error };
 }
 
-function chooseDecodeProfile(canvas) {
-  return [NORMAL_PROFILE, POST_PROFILE]
-    .map(profile => getGridFit(canvas, profile))
-    .sort((a, b) => a.error - b.error)[0];
+function buildDecodeCandidates(canvas) {
+  const seen = new Set();
+  const candidates = [];
+
+  function add(profile, cols, rowsCount, scaleX, scaleY, label) {
+    cols = Math.max(1, Math.round(cols));
+    rowsCount = Math.max(1, Math.round(rowsCount));
+    const key = [profile.name, cols, rowsCount, scaleX.toFixed(4), scaleY.toFixed(4), label].join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push({ profile, cols, rowsCount, scaleX, scaleY, label });
+  }
+
+  DECODE_PROFILES.forEach(profile => {
+    const exact = getGridFit(canvas, profile);
+    add(profile, exact.cols, exact.rowsCount, 1, 1, 'exact');
+
+    const colSet = new Set([
+      exact.cols,
+      profile.wrapCols || exact.cols,
+      Math.max(1, Math.round((canvas.width / Math.max(1, profile.cellW)) * 0.7)),
+      Math.max(1, Math.round((canvas.width / Math.max(1, profile.cellW)) * 1.2))
+    ]);
+
+    if (profile.wrapCols) {
+      colSet.add(profile.wrapCols);
+      colSet.add(Math.max(1, profile.wrapCols - 1));
+      colSet.add(profile.wrapCols + 1);
+      colSet.add(Math.max(1, Math.round(profile.wrapCols * 0.75)));
+      colSet.add(Math.max(1, Math.round(profile.wrapCols * 0.5)));
+    }
+
+    [...colSet]
+      .filter(cols => cols >= 1 && cols <= 80)
+      .forEach(cols => {
+        const expectedW = getExpectedGridSize(cols, 1, profile).width;
+        const scaleX = canvas.width / expectedW;
+        if (!(scaleX > 0.08 && scaleX < 6)) return;
+
+        const rowEstimate = Math.max(
+          1,
+          Math.round((canvas.height / scaleX - profile.margin * 2 + profile.gapY) / (profile.cellH + profile.gapY))
+        );
+
+        for (let delta = -3; delta <= 3; delta++) {
+          const rowsCount = rowEstimate + delta;
+          if (rowsCount < 1 || rowsCount > 2000) continue;
+          const expectedH = getExpectedGridSize(cols, rowsCount, profile).height;
+          const scaleY = canvas.height / expectedH;
+          if (!(scaleY > 0.08 && scaleY < 6)) continue;
+          const mismatch = Math.abs(scaleX - scaleY) / Math.max(scaleX, scaleY);
+          if (mismatch > 0.22) continue;
+          add(profile, cols, rowsCount, scaleX, scaleY, 'scaled');
+        }
+      });
+  });
+
+  return candidates;
 }
 
-function decodeCanvasToBits(canvas, profile = null) {
-  const fit = profile ? getGridFit(canvas, profile) : chooseDecodeProfile(canvas);
-  const p = fit.profile;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+function decodeWithCandidate(canvas, imageData, candidate) {
+  const scaledProfile = {
+    name: candidate.profile.name,
+    cellW: candidate.profile.cellW * candidate.scaleX,
+    cellH: candidate.profile.cellH * candidate.scaleY,
+    gapX: candidate.profile.gapX * candidate.scaleX,
+    gapY: candidate.profile.gapY * candidate.scaleY,
+    marginX: candidate.profile.margin * candidate.scaleX,
+    marginY: candidate.profile.margin * candidate.scaleY,
+    stroke: Math.max(1, candidate.profile.stroke * ((candidate.scaleX + candidate.scaleY) / 2))
+  };
 
   const rows = [];
-  for (let row = 0; row < fit.rowsCount; row++) {
+  let validCount = 0;
+  let nonSpaceCount = 0;
+  let alphaNumCount = 0;
+  const uniqueChars = new Set();
+  const total = candidate.cols * candidate.rowsCount;
+
+  for (let row = 0; row < candidate.rowsCount; row++) {
     const bitsRow = [];
-    for (let col = 0; col < fit.cols; col++) {
-      const x = p.margin + col * (p.cellW + p.gapX);
-      const y = p.margin + row * (p.cellH + p.gapY);
-      const bits = SEGMENTS.map(seg => sampleSegment(imageData, canvas.width, x, y, seg, p) ? '1' : '0').join('');
+    const charsRow = [];
+    for (let col = 0; col < candidate.cols; col++) {
+      const x = scaledProfile.marginX + col * (scaledProfile.cellW + scaledProfile.gapX);
+      const y = scaledProfile.marginY + row * (scaledProfile.cellH + scaledProfile.gapY);
+      const bits = SEGMENTS.map(seg => sampleSegment(imageData, canvas.width, x, y, seg, scaledProfile) ? '1' : '0').join('');
+      const ch = REVERSE[bits] ?? '�';
       bitsRow.push(bits);
+      charsRow.push(ch);
+      if (bits in REVERSE) validCount++;
+      if (ch !== ' ' && ch !== '�') nonSpaceCount++;
+      if (/^[A-Z0-9]$/.test(ch)) alphaNumCount++;
+      if (ch !== ' ' && ch !== '�') uniqueChars.add(ch);
     }
-    rows.push(bitsRow);
+    rows.push({ bits: bitsRow, chars: charsRow });
   }
-  return { rows, values: rows.flat(), cols: fit.cols, rowsCount: fit.rowsCount, profile: p.name };
+
+  const validRatio = total ? validCount / total : 0;
+  const nonSpaceRatio = total ? nonSpaceCount / total : 0;
+  const alphaNumRatio = total ? alphaNumCount / total : 0;
+  const uniqueRatio = Math.min(1, uniqueChars.size / 16);
+  const scaleMismatch = Math.abs(candidate.scaleX - candidate.scaleY) / Math.max(candidate.scaleX, candidate.scaleY);
+  const score = validRatio + nonSpaceRatio * 0.6 + alphaNumRatio * 0.2 + uniqueRatio * 0.15 - scaleMismatch * 0.35;
+
+  return {
+    rows,
+    values: rows.flatMap(row => row.bits),
+    cols: candidate.cols,
+    rowsCount: candidate.rowsCount,
+    profile: candidate.profile.name,
+    label: candidate.label,
+    scaleX: candidate.scaleX,
+    scaleY: candidate.scaleY,
+    score,
+    validRatio,
+    nonSpaceRatio,
+    alphaNumRatio
+  };
+}
+
+function decodeCanvasToBits(canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const candidates = buildDecodeCandidates(canvas);
+
+  let best = null;
+  for (const candidate of candidates) {
+    const decoded = decodeWithCandidate(canvas, imageData, candidate);
+    if (!best || decoded.score > best.score) {
+      best = decoded;
+    }
+  }
+
+  return best;
 }
 
 function decodeCanvas(canvas) {
-  const { rows } = decodeCanvasToBits(canvas);
-  const lines = rows.map(bitsRow => bitsRow.map(bits => REVERSE[bits] ?? '�').join('').replace(/\s+$/g, ''));
+  const decoded = decodeCanvasToBits(canvas);
+  const lines = decoded.rows.map(row => row.chars.join('').replace(/\s+$/g, ''));
   return lines.join('\n').replace(/\n+$/g, '');
 }
 
@@ -267,6 +449,135 @@ function downloadCanvas(canvas, filename) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    c = CRC_TABLE[(c ^ bytes[i]) & 255] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function canvasToPngBytes(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(async blob => {
+      if (!blob) {
+        reject(new Error('PNG生成に失敗しました。'));
+        return;
+      }
+      resolve(new Uint8Array(await blob.arrayBuffer()));
+    }, 'image/png');
+  });
+}
+
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  function pushU16(view, pos, value) { view.setUint16(pos, value, true); }
+  function pushU32(view, pos, value) { view.setUint32(pos, value >>> 0, true); }
+
+  files.forEach(file => {
+    const nameBytes = enc.encode(file.name);
+    const data = file.bytes;
+    const crc = crc32(data);
+
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    pushU32(lv, 0, 0x04034b50);
+    pushU16(lv, 4, 20);
+    pushU16(lv, 6, 0);
+    pushU16(lv, 8, 0);
+    pushU16(lv, 10, dosTime);
+    pushU16(lv, 12, dosDate);
+    pushU32(lv, 14, crc);
+    pushU32(lv, 18, data.length);
+    pushU32(lv, 22, data.length);
+    pushU16(lv, 26, nameBytes.length);
+    pushU16(lv, 28, 0);
+    local.set(nameBytes, 30);
+    localParts.push(local, data);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    pushU32(cv, 0, 0x02014b50);
+    pushU16(cv, 4, 20);
+    pushU16(cv, 6, 20);
+    pushU16(cv, 8, 0);
+    pushU16(cv, 10, 0);
+    pushU16(cv, 12, dosTime);
+    pushU16(cv, 14, dosDate);
+    pushU32(cv, 16, crc);
+    pushU32(cv, 20, data.length);
+    pushU32(cv, 24, data.length);
+    pushU16(cv, 28, nameBytes.length);
+    pushU16(cv, 30, 0);
+    pushU16(cv, 32, 0);
+    pushU16(cv, 34, 0);
+    pushU16(cv, 36, 0);
+    pushU32(cv, 38, 0);
+    pushU32(cv, 42, offset);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length + data.length;
+  });
+
+  const centralSize = centralParts.reduce((sum, p) => sum + p.length, 0);
+  const centralOffset = offset;
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  pushU32(ev, 0, 0x06054b50);
+  pushU16(ev, 4, 0);
+  pushU16(ev, 6, 0);
+  pushU16(ev, 8, files.length);
+  pushU16(ev, 10, files.length);
+  pushU32(ev, 12, centralSize);
+  pushU32(ev, 16, centralOffset);
+  pushU16(ev, 20, 0);
+
+  return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  a.remove();
+}
+
+async function downloadCanvasListAsZip(canvases, baseName) {
+  const files = [];
+  for (let idx = 0; idx < canvases.length; idx++) {
+    files.push({
+      name: `${baseName}-${String(idx + 1).padStart(2, '0')}.png`,
+      bytes: await canvasToPngBytes(canvases[idx])
+    });
+  }
+  const zip = makeZip(files);
+  downloadBlob(zip, `${baseName}.zip`);
 }
 
 function buildLegend() {
@@ -331,28 +642,6 @@ function renderLegendCanvas() {
   return canvas;
 }
 
-function readPngFile(file) {
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0);
-    const decoded = decodeCanvas(canvas);
-    document.getElementById('decodedText').value = decoded;
-    URL.revokeObjectURL(img.src);
-  };
-  img.onerror = () => alert('PNGを読み込めませんでした。');
-  img.src = URL.createObjectURL(file);
-}
-
-function readLockPngFile(file) {
-  pendingLockFile = file;
-  const status = document.getElementById('unlockStatus');
-  status.textContent = 'LOCK PNGを読み込みました。パスワードを入力して「復号する」を押してください。';
-}
-
 function loadImageFileToCanvas(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -368,6 +657,33 @@ function loadImageFileToCanvas(file) {
     img.onerror = () => reject(new Error('PNGを読み込めませんでした。'));
     img.src = URL.createObjectURL(file);
   });
+}
+
+async function readPngFiles(files) {
+  const out = document.getElementById('decodedText');
+  out.value = '';
+  try {
+    const decodedParts = [];
+    for (const file of files) {
+      const canvas = await loadImageFileToCanvas(file);
+      decodedParts.push(decodeCanvas(canvas));
+    }
+    out.value = decodedParts.join('\n');
+  } catch (_) {
+    alert('PNGを読み込めませんでした。');
+  }
+}
+
+function readLockPngFile(files) {
+  pendingLockFiles = Array.from(files || []);
+  const status = document.getElementById('unlockStatus');
+  if (pendingLockFiles.length === 0) {
+    status.textContent = '';
+    return;
+  }
+  status.textContent = pendingLockFiles.length === 1
+    ? 'LOCK PNGを読み込みました。パスワードを入力して「復号する」を押してください。'
+    : `${pendingLockFiles.length}枚のLOCK PNGを読み込みました。パスワードを入力して「復号する」を押してください。`;
 }
 
 function bytesToSixValues(bytes) {
@@ -505,15 +821,19 @@ async function decryptSelectedLockPng() {
   const status = document.getElementById('unlockStatus');
   const out = document.getElementById('unlockedText');
   out.value = '';
-  if (!pendingLockFile) {
+  if (!pendingLockFiles.length) {
     status.textContent = '先にLOCK PNGを選択してください。';
     return;
   }
   const password = document.getElementById('unlockPassword').value;
   status.textContent = 'PNGを読み取って復号しています...';
   try {
-    const canvas = await loadImageFileToCanvas(pendingLockFile);
-    const { values } = decodeCanvasToBits(canvas);
+    let values = [];
+    for (const file of pendingLockFiles) {
+      const canvas = await loadImageFileToCanvas(file);
+      const decoded = decodeCanvasToBits(canvas);
+      values = values.concat(decoded.values);
+    }
     const text = await decryptPayloadFromValues(values, password);
     out.value = text;
     status.textContent = '復号しました。';
@@ -542,19 +862,18 @@ function init() {
     render();
     downloadCanvas(canvas, '6seg-script.png');
   });
-  document.getElementById('downloadPostBtn').addEventListener('click', () => {
+  document.getElementById('downloadPostBtn').addEventListener('click', async () => {
     input.value = normalizeText(input.value);
-    const postCanvas = document.createElement('canvas');
-    renderTextToCanvas(input.value, postCanvas, POST_PROFILE, POST_PROFILE.wrapCols);
-    downloadCanvas(postCanvas, '6seg-script-x-readable.png');
+    const pages = renderTextPagesToCanvases(input.value, X_PROFILE);
+    await downloadCanvasListAsZip(pages, '6seg-script-x-readable');
   });
   document.getElementById('downloadTableBtn').addEventListener('click', () => {
     const tableCanvas = renderLegendCanvas();
     downloadCanvas(tableCanvas, '6seg-script-table.png');
   });
   document.getElementById('imageFile').addEventListener('change', ev => {
-    const file = ev.target.files && ev.target.files[0];
-    if (file) readPngFile(file);
+    const files = Array.from(ev.target.files || []);
+    if (files.length) readPngFiles(files);
   });
   document.getElementById('copyDecodedBtn').addEventListener('click', async () => {
     const text = document.getElementById('decodedText').value;
@@ -574,14 +893,12 @@ function init() {
   document.getElementById('downloadLockPostBtn').addEventListener('click', async () => {
     if (!lastLockCanvasReady) await encryptAndRender();
     if (lastLockCanvasReady && lastLockValues) {
-      const postCanvas = document.createElement('canvas');
-      renderValuesToCanvas(lastLockValues, postCanvas, POST_PROFILE.wrapCols, POST_PROFILE);
-      downloadCanvas(postCanvas, '6seg-lock-x-readable.png');
+      const pages = renderValuePagesToCanvases(lastLockValues, X_PROFILE);
+      await downloadCanvasListAsZip(pages, '6seg-lock-x-readable');
     }
   });
   document.getElementById('lockImageFile').addEventListener('change', ev => {
-    const file = ev.target.files && ev.target.files[0];
-    if (file) readLockPngFile(file);
+    readLockPngFile(ev.target.files || []);
   });
   document.getElementById('decryptBtn').addEventListener('click', decryptSelectedLockPng);
 

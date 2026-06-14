@@ -33,7 +33,7 @@
       <div class="controls">
         <button id="renderBtn">Render</button>
         <button id="downloadBtn" class="secondary">PNG保存</button>
-        <button id="downloadPostBtn" class="secondary">X用PNG保存（読取対応）</button>
+        <button id="downloadPostBtn" class="secondary">X用PNG ZIP保存（読取対応）</button>
         <button id="downloadTableBtn" class="ghost">換字表PNG</button>
       </div>
 
@@ -51,7 +51,7 @@
       <div class="canvas-wrap">
         <canvas id="previewCanvas" width="800" height="180" aria-label="6SEG output preview"></canvas>
       </div>
-      <p class="note">PNGの中に隠しデータは入れていません。描かれた6セグ文字そのものを読み取ります。X投稿には「X用PNG保存（読取対応）」を使ってください。</p>
+      <p class="note">PNGの中に隠しデータは入れていません。描かれた6セグ文字そのものを読み取ります。X投稿には「X用PNG ZIP保存（読取対応）」を使ってください。長文は小さめのPNGに自動分割され、ZIPにまとめて保存されます。</p>
     </section>
 
     <section class="card">
@@ -63,8 +63,8 @@
       </div>
 
       <label class="file-box" for="imageFile">
-        <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" />
-        <span>通常PNGを選択して読み込む</span>
+        <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" multiple />
+        <span>通常PNGを選択して読み込む（複数枚対応）</span>
       </label>
 
       <label for="decodedText">読み取り結果</label>
@@ -74,7 +74,7 @@
         <button id="copyDecodedBtn" class="secondary">読み取り結果をコピー</button>
       </div>
 
-      <p class="note">この読み取りは、このアプリで保存した白黒PNGを想定しています。拡大縮小、スクリーンショット、色変更、強い圧縮を行うと読み取りに失敗する場合があります。</p>
+      <p class="note">この読み取りは、このアプリで保存した白黒PNGを想定しています。複数枚のX用PNGもまとめて読み込めます。v0.3.1以降は縮小画像にも前より強くしていますが、色変更や強い圧縮では失敗する場合があります。</p>
     </section>
 
     <section class="card lock-card">
@@ -94,7 +94,7 @@
       <div class="controls">
         <button id="encryptBtn">暗号化して描画</button>
         <button id="downloadLockBtn" class="secondary">LOCK PNG保存</button>
-        <button id="downloadLockPostBtn" class="secondary">X用LOCK PNG保存（読取対応）</button>
+        <button id="downloadLockPostBtn" class="secondary">X用LOCK PNG ZIP保存（読取対応）</button>
       </div>
 
       <p id="lockStatus" class="note strong-note">AES-GCM 256bit + PBKDF2-SHA-256。PNGには隠しメタデータではなく、暗号データを6SEG文字として描画します。</p>
@@ -123,8 +123,8 @@
       </div>
 
       <label class="file-box" for="lockImageFile">
-        <input id="lockImageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" />
-        <span>LOCK PNGを選択して読み込む</span>
+        <input id="lockImageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" multiple />
+        <span>LOCK PNGを選択して読み込む（複数枚対応）</span>
       </label>
 
       <label for="unlockPassword">パスワード</label>

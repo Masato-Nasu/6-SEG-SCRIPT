@@ -1,4 +1,4 @@
-const CACHE_NAME = '6seg-script-v0-2-0';
+const CACHE_NAME = '6seg-script-v0-3-2';
 const FILES = ['./', './index.html', './style.css', './app.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', event => {
